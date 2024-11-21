@@ -229,7 +229,8 @@
                 ws.close();
             }
 
-            ws = new WebSocket(`ws://localhost:8000/ws/${userId}`);
+            ws = new WebSocket(`wss://chat-api-flyo.onrender.com/ws/${userId}`);
+
             let connectionEstablished = false;
 
             ws.onopen = function() {
