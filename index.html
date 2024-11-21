@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat en Vivo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #1a1a1a;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #e0e0e0;
+        }
+
+        .login-container {
+            background: #2d2d2d;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            margin-top: 20vh;
+            text-align: center;
+            width: 90%;
+            max-width: 400px;
+            border: 1px solid #404040;
+        }
+
+        .chat-container {
+            display: none;
+            width: 90%;
+            max-width: 800px;
+            height: 90vh;
+            margin: 20px auto;
+            background: #2d2d2d;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #404040;
+        }
+
+        .chat-header {
+            padding: 15px;
+            background: #1e1e1e;
+            color: #e0e0e0;
+            border-radius: 15px 15px 0 0;
+            border-bottom: 1px solid #404040;
+        }
+
+        .messages-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #262626;
+            scrollbar-width: thin;
+            scrollbar-color: #404040 #262626;
+        }
+
+        .messages-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .messages-container::-webkit-scrollbar-track {
+            background: #262626;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background-color: #404040;
+            border-radius: 4px;
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 12px 18px;
+            border-radius: 15px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+
+        .message.received {
+            background: #383838;
+            margin-right: auto;
+            color: #e0e0e0;
+            border: 1px solid #404040;
+        }
+
+        .message.sent {
+            background: #2c5282;
+            margin-left: auto;
+            color: #ffffff;
+        }
+
+        .user-info {
+            font-size: 0.8em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .input-container {
+            padding: 15px;
+            background: #1e1e1e;
+            border-top: 1px solid #404040;
+            display: flex;
+            gap: 10px;
+            border-radius: 0 0 15px 15px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #404040;
+            border-radius: 20px;
+            outline: none;
+            font-size: 16px;
+            background: #333;
+            color: #e0e0e0;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            border-color: #4a9eff;
+        }
+
+        input[type="text"]::placeholder {
+            color: #888;
+        }
+
+        button {
+            padding: 12px 25px;
+            background: #2c5282;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.1s;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background: #3a6fb3;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .online-users {
+            padding: 10px;
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 600px) {
+            .chat-container {
+                height: 100vh;
+                width: 100%;
+                margin: 0;
+                border-radius: 0;
+            }
+
+            .chat-header {
+                border-radius: 0;
+            }
+
+            .input-container {
+                border-radius: 0;
+            }
+        }
+
+        /* Animaciones */
+        .message {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="loginScreen" class="login-container">
+        <h2>Bienvenido al Chat</h2>
+        <p style="margin: 15px 0; color: #888;">Ingresa tu nombre de usuario para comenzar</p>
+        <input type="text" id="usernameInput" placeholder="Nombre de usuario" style="margin: 10px 0;">
+        <button onclick="login()">Entrar al Chat</button>
+    </div>
+
+    <div id="chatScreen" class="chat-container" style="display: none;">
+        <div class="chat-header">
+            <h2>Chat en Vivo</h2>
+            <div class="online-users" id="onlineUsers">Usuarios conectados: 0</div>
+        </div>
+        <div class="messages-container" id="output"></div>
+        <div class="input-container">
+            <input type="text" id="messageInput" placeholder="Escribe un mensaje..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Enviar</button>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let userId;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        function updateUserCount(count) {
+            console.log("Actualizando contador de usuarios:", count);
+            document.getElementById("onlineUsers").textContent = `Usuarios conectados: ${count}`;
+        }
+
+        function connectWebSocket() {
+            console.log("Conectando WebSocket...");
+            if (ws) {
+                ws.close();
+            }
+
+            ws = new WebSocket(`ws://localhost:8000/ws/${userId}`);
+            let connectionEstablished = false;
+
+            ws.onopen = function() {
+                console.log("Intentando conectar al servidor WebSocket...");
+            };
+
+            ws.onmessage = function(event) {
+                console.log("Mensaje recibido del servidor:", event.data);
+                const data = JSON.parse(event.data);
+                
+                switch(data.type) {
+                    case "connection_established":
+                        console.log("Conexión establecida exitosamente");
+                        connectionEstablished = true;
+                        reconnectAttempts = 0;
+                        break;
+                        
+                    case "ping":
+                        console.log("Ping recibido, enviando pong...");
+                        ws.send(JSON.stringify({type: "pong"}));
+                        break;
+                        
+                    case "user_count":
+                        console.log("Actualizando contador de usuarios:", data.count);
+                        updateUserCount(data.count);
+                        break;
+                        
+                    case "message":
+                        if (data.message && data.userId) {
+                            console.log("Mensaje recibido:", data.message);
+                            const outputDiv = document.getElementById("output");
+                            const messageDiv = document.createElement('div');
+                            messageDiv.className = `message ${data.userId === userId ? 'sent' : 'received'}`;
+                            
+                            const userInfo = document.createElement('div');
+                            userInfo.className = 'user-info';
+                            userInfo.textContent = data.userId;
+                            
+                            const messageContent = document.createElement('div');
+                            messageContent.textContent = data.message;
+                            
+                            messageDiv.appendChild(userInfo);
+                            messageDiv.appendChild(messageContent);
+                            outputDiv.appendChild(messageDiv);
+                            
+                            outputDiv.scrollTop = outputDiv.scrollHeight;
+                        }
+                        break;
+                }
+            };
+
+            ws.onclose = function(event) {
+                console.log("WebSocket cerrado:", event);
+                if (!connectionEstablished) {
+                    if (event.code === 1008) {
+                        alert("Nombre de usuario ya está en uso");
+                        document.getElementById("loginScreen").style.display = "block";
+                        document.getElementById("chatScreen").style.display = "none";
+                        userId = null;
+                    }
+                } else if (userId && reconnectAttempts < maxReconnectAttempts) {
+                    console.log("Intentando reconectar...");
+                    reconnectAttempts++;
+                    setTimeout(connectWebSocket, 1000 * reconnectAttempts);
+                } else if (reconnectAttempts >= maxReconnectAttempts) {
+                    alert("No se pudo reconectar. Por favor, recarga la página.");
+                    document.getElementById("loginScreen").style.display = "block";
+                    document.getElementById("chatScreen").style.display = "none";
+                    userId = null;
+                }
+            };
+
+            ws.onerror = function(error) {
+                console.error("Error en WebSocket:", error);
+            };
+        }
+
+        function login() {
+            console.log("Iniciando sesión...");
+            const inputUsername = document.getElementById("usernameInput").value.trim();
+            if (!inputUsername) {
+                alert("Por favor ingresa un nombre de usuario");
+                return;
+            }
+
+            userId = inputUsername;
+            document.getElementById("loginScreen").style.display = "none";
+            document.getElementById("chatScreen").style.display = "flex";
+            
+            connectWebSocket();
+        }
+
+        function sendMessage() {
+            console.log("Enviando mensaje...");
+            const messageInput = document.getElementById("messageInput");
+            const message = messageInput.value.trim();
+            
+            if (message && ws && ws.readyState === WebSocket.OPEN) {
+                const messageData = {
+                    type: "message",
+                    userId: userId,
+                    message: message
+                };
+                console.log("Mensaje a enviar:", messageData);
+                ws.send(JSON.stringify(messageData));
+                messageInput.value = "";
+            } else if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.log("WebSocket cerrado, intentando reconectar...");
+                connectWebSocket();
+                setTimeout(() => sendMessage(), 1000);
+            }
+        }
+
+        function handleKeyPress(event) {
+            console.log("Tecla presionada:", event.keyCode);
+            if (event.keyCode === 13) { // Enter key
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // Prevenir que se envíe el formulario al presionar enter
+        document.addEventListener('submit', function(e) {
+            console.log("Formulario enviado, previniendo acción por defecto...");
+            e.preventDefault();
+        });
+
+        // Manejar la visibilidad de la página
+        document.addEventListener('visibilitychange', function() {
+            console.log("Cambio de visibilidad:", document.visibilityState);
+            if (document.visibilityState === 'visible' && userId) {
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    connectWebSocket();
+                }
+            }
+        });
+
+        // Manejar reconexión cuando la ventana recupera la conexión
+        window.addEventListener('online', function() {
+            console.log("Ventana en línea, intentando reconectar...");
+            if (userId && (!ws || ws.readyState !== WebSocket.OPEN)) {
+                connectWebSocket();
+            }
+        });
+    </script>
+</body>
+</html>
